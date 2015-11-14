@@ -1,3 +1,10 @@
+# Classification files
+data/*.csv
+data/*.json
+
+# Output files
+data_out/*.csv
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
