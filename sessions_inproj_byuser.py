@@ -1,4 +1,24 @@
 import sys
+
+# file with raw classifications (csv)
+# put this way up here so if there are no inputs we exit quickly before even trying to load everything else
+default_statstart = "data_out/session_stats"
+try:
+    classfile_in = sys.argv[1]
+except:
+    #classfile_in = 'data/2e3d12a2-56ca-4d1f-930a-9ecc7fd39885.csv'
+    print "\nUsage: "+sys.argv[0]+" classifications_infile [stats_outfile session_break_length]"
+    print "      classifications_infile is a Zooniverse (Panoptes) classifications data export CSV."
+    print "      stats_outfile is the name of an outfile you'd like to write."
+    print "           if you don't specify one it will be "+default_statstart+"_[date]_to_[date].csv"
+    print "           where the dates show the first & last classification date."
+    print "      A new session is defined to start when 2 classifications by the same classifier are"
+    print "           separated by at least session_break_length minutes (default value: 60)"
+    print "\nOnly the classifications_infile is a required input.\n"
+    sys.exit(0)
+
+
+
 import numpy as np
 import pandas as pd
 #import matplotlib.pyplot as plt
@@ -51,20 +71,13 @@ ns2mins  = 1.0 / (1.0e9*60.)
 #cols_used = ["user_name", "user_id", "created_at", "metadata"]
 cols_used = ["created_at_ts", "user_name", "user_id", "created_at", "started_at", "finished_at"]
 
-# usage: 
-
-# file with raw classifications (csv)
-try:
-    classfile_in = sys.argv[1]
-except:
-    classfile_in = 'data/2e3d12a2-56ca-4d1f-930a-9ecc7fd39885.csv'
 
 
 try:
     statsfile_out = sys.argv[2]
     modstatsfile = False
 except:
-    statsfile_out = 'data_out/session_stats.csv'
+    statsfile_out = default_statstart+".csv"
     modstatsfile = True
 
 
