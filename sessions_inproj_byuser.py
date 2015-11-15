@@ -370,4 +370,6 @@ if modstatsfile:
 
 print "Writing to file", statsfile_out,"..."
 session_stats.to_csv(statsfile_out)
+
+
             
