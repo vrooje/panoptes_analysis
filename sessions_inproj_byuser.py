@@ -321,7 +321,11 @@ except Exception as the_error:
 
 
 
+
+
 # save processing time and memory; only keep the columns we're going to use
+# though before we do that, grab the subject count
+n_subj_tot  = len(classifications.subject_data.unique())
 classifications = classifications[cols_used]
 
 # index by created_at as a timeseries
@@ -334,8 +338,30 @@ all_users = classifications.user_name.unique()
 by_user = classifications.groupby('user_name')
 
 
-# compute the stats
-print "Computing session stats for each user..."
+# get some basic stats
+n_class_tot = len(classifications)
+n_users_tot = len(all_users)
+
+unregistered = [q.startswith("not-logged-in") for q in all_users]
+n_unreg = sum(unregistered)
+n_reg   = n_users_tot - n_unreg
+
+nclass_byuser = by_user.created_at.aggregate('count')
+nclass_byuser_ranked = nclass_byuser.copy()
+nclass_byuser_ranked.sort(ascending=False)
+nclass_med    = np.median(nclass_byuser)
+nclass_mean   = np.mean(nclass_byuser)
+
+print "\nOverall:\n\n",n_class_tot,"classifications of",n_subj_tot,"subjects by",n_users_tot,"classifiers,"
+print n_reg,"registered and",n_unreg,"unregistered.\n"
+print "Median number of classifications per user:",nclass_med
+print "Mean number of classifications per user: %.2f" % nclass_mean
+print "\nTop 10 most prolific classifiers:\n",nclass_byuser_ranked.head(10)
+
+
+
+# compute the per-user stats
+print "\nComputing session stats for each user..."
 session_stats = by_user.apply(sessionstats)
 
 # If no stats file was supplied, add the start and end dates in the classification file to the output filename
