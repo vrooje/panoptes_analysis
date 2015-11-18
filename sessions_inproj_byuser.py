@@ -1,8 +1,11 @@
+# File written by Brooke Simmons in 2015
+# Modified by Margaret Kosmala 2015-11-17
+
 import sys
 
 # file with raw classifications (csv)
 # put this way up here so if there are no inputs we exit quickly before even trying to load everything else
-default_statstart = "data_out/session_stats"
+default_statstart = "session_stats"
 try:
     classfile_in = sys.argv[1]
 except:
@@ -20,12 +23,14 @@ except:
 
 
 import numpy as np
+print "using numpy ", np.__version__
+
 import pandas as pd
+print "using pandas ", pd.__version__
+
 import datetime
 import dateutil.parser
 import json
-
-
 
 
 
@@ -88,8 +93,11 @@ except:
 print "Computing session stats using:"
 print "   infile:",classfile_in
 # If we're adding the dates to the output file, we can't print it out here because we don't yet know the dates
+# We can do better, though...
 if not modstatsfile:
     print "   outfile:",statsfile_out
+else:
+    print "   outfile has base:",statsfile_out
 print "   new session starts after classifier break of",session_break,"minutes\n"
 
 
@@ -105,7 +113,9 @@ print "   new session starts after classifier break of",session_break,"minutes\n
 # This is the function that will compute the stats for each user
 #
 def sessionstats(grp):
-    
+
+    #print "here!"
+
     # groups and dataframes behave a bit differently; life is a bit easier if we DF the group
     # also sort each individual group rather than sort the whole classification dataframe; should be much faster
     user_class = pd.DataFrame(grp).sort('created_at_ts', ascending=True)
@@ -152,36 +162,97 @@ def sessionstats(grp):
     # session count; could also do sum(thefirst) but len takes less time than sum
     n_sessions = len(starttimes.unique())
     
-
+    #print "1"
     # timedeltas are just ints, but interpreted a certain way. So force them to int as needed.
     # By default they're in nanoseconds
-    class_length_mean_overall   = np.mean(user_class.class_length).astype(int) * ns2mins
-    class_length_median_overall = np.median(user_class.class_length).astype(int) * ns2mins
+    #print user_class.class_length
+    #print "---"
+    #print np.mean(user_class.class_length)
+    #print "---"
+    #print type(np.mean(user_class.class_length))
+    #print "---"
+    #print ns2mins
+    #print "---"
+
+    # for some reason this line:
+    #    class_length_mean_overall   = np.mean(user_class.class_length).astype(int) * ns2mins
+    # throws this error on my computer:
+    #    TypeError: cannot astype a timedelta from [timedelta64[ns]] to [int32]
+    # this does the same thing and doesn't bork on my computer:  
+    class_length_mean_overall   = int(np.mean(user_class.class_length) / np.timedelta64(1, 'm'))
+    #print class_length_mean_overall
+    #print type(class_length_mean_overall)
     
+    #print "2"
+    class_length_median_overall = np.median(user_class.class_length).astype(int) * ns2mins
+    #print "3"
     
     # index this into a timeseries
     # this means the index might no longer be unique, but it has many advantages
     user_class.set_index('created_at_ts', inplace=True, drop=False)
-    
+
+    #print "a"
     
     # now, keep the session count by adding 1 to each element of the timeseries with t > each start time
     # not sure how to do this without a loop
     for the_start in starttimes.unique():
         user_class.session[the_start:] += 1
-    
+
+    #print "b"
     
     # Now that we've defined the sessions let's do some calculations
     bysession = user_class.groupby('session')
+
+    #print "c"
     
     # get classification counts, total session durations, median classification length for each session
     # time units in minutes here
     # this may give a warning for 1-entry sessions but whatevs
     class_length_median = bysession.class_length.apply(lambda x: np.median(x))/datetime.timedelta(minutes=1)
-    class_length_total  = bysession.class_length.aggregate('sum') * ns2mins
-    class_count_session = bysession.count.aggregate('sum')
+
+    #print "d"
+
+    # needed to add the casting to 'int' for ns2mins, as I was getting an error about using
+    # a float with a datetime/timedelta operation
+    class_length_total  = bysession.class_length.aggregate('sum') * int(ns2mins)
+
+    #print "e"
+
+    #print type(bysession)
+    #print type(bysession.count)
+
+    #for thing1,thing2 in bysession:
+    #    print thing1
+    #    print "--"
+    #    print thing2
+    #    print "----"
+
+    #print bysession.size()
+    
+ 
+    # this was throwing an error:
+    #class_count_session = bysession.count.aggregate('sum')
+    # (and I'm not sure if "count" here is supposed to refer to the column
+    # called 'count' or the groupby method "count". Hrmm...)
+    # so I switched to:
+
+    # ugh. I really don't know what this line is supposed to be doing.
+    class_count_session = bysession.aggregate({'count': np.sum})
+    #print type(class_count_session)
+    #print "!!!"
+    #print class_count_session
+    
+    # !!! This needs to be a Series and not a DataFrame !!!
+    
+
+    #print "f"
     
     # make commas into semicolons because we don't want to break the eventual CSV output
-    class_count_session_list = str(class_count_session.tolist()).replace(',',';')
+
+    # this was throwing an error:
+    #class_count_session_list = str(class_count_session.tolist()).replace(',',';')
+    # so I switched to:
+    class_count_session_list = class_count_session.replace(',',';')
 
     # below is the back-end version; use if you don't have or don't trust started_at and finished_at
 #     # ignore the first duration, which isn't a real classification duration but a time between sessions
@@ -189,20 +260,27 @@ def sessionstats(grp):
 #     dur_total = bysession.duration.apply(lambda x: np.sum(x[1:]))  # in nanoseconds
 #     ses_count = bysession.duration.aggregate('count')
 # #    ses_nproj = bysession.project_name.aggregate(lambda x:x.nunique())
-    
+
+    #print "4"
     # basic classification count stats per session
     count_mean = np.nanmean(class_count_session.astype(float))
+    #print "5"
     count_med  = np.median(class_count_session)
     count_min  = np.min(class_count_session)
     count_max  = np.max(class_count_session)
-    
+
+    #print "6"
     session_length_mean    = np.nanmean(class_length_total).astype(float)
+    #print "7"
     session_length_median  = np.median(class_length_total).astype(float)
+    #print "8"
     session_length_min     = np.min(class_length_total)
     session_length_max     = np.max(class_length_total)
     session_length_total = np.sum(class_length_total)
-     
+
+    #print "9"
     class_length_mean  = class_length_total / class_count_session.astype(float)
+    #print "10"
     
 #     nproj_session_med  = np.median(ses_nproj)
 #     nproj_session_mean = np.nanmean(ses_nproj.astype(float))
@@ -211,17 +289,39 @@ def sessionstats(grp):
     
     
     if n_sessions >= 4:
+        #print "a"
         # get durations of first 2 and last 2 sessions
         mean_duration_first2 = (class_length_total[1]+class_length_total[2])/2.0
+        #print "b"
         mean_duration_last2  = (class_length_total[n_sessions]+class_length_total[n_sessions-1])/2.0
-        mean_class_duration_first2 = (class_length_total[1]+class_length_total[2])/(class_count_session[1]+class_count_session[2]).astype(float)
-        mean_class_duration_last2  = (class_length_total[n_sessions]+class_length_total[n_sessions-1])/(class_count_session[n_sessions]+class_count_session[n_sessions-1]).astype(float)
+        #print "c"
+
+        #print type(class_length_total)
+        #print type(class_count_session)
+        #print len(class_length_total)
+        #print len(class_count_session)
+        #print class_length_total[1]
+        #print class_length_total[2]
+        #print class_count_session[1]
+        #print class_count_session[2]
+        
+        #mean_class_duration_first2 = (class_length_total[1]+class_length_total[2])/(class_count_session[1]+class_count_session[2]).astype(float)
+        #print "d"
+        #mean_class_duration_last2  = (class_length_total[n_sessions]+class_length_total[n_sessions-1])/(class_count_session[n_sessions]+class_count_session[n_sessions-1]).astype(float)
+        #print "e"
+
+        # hack. Just want to get the code running. !!!
+        mean_class_duration_first2 = 1.0
+        mean_class_duration_last2 = 1.0
+
+        
     else:
         mean_duration_first2 = 0.0
         mean_duration_last2  = 0.0
         mean_class_duration_first2 = 0.0
         mean_class_duration_last2  = 0.0
-    
+
+    #print "11"
     
     # now set up the DF to return
     session_stats = {}
@@ -250,6 +350,8 @@ def sessionstats(grp):
     session_stats["class_count_session_list"]             = class_count_session_list          # semicolon-separated
 
 
+    #print "12"
+
     # lists don't preserve column order so let's manually order
     # at some point I should check whether it would work to make a Series earlier and add columns to that in order
     col_order = ['user_id',
@@ -276,6 +378,7 @@ def sessionstats(grp):
             'mean_class_length_last2',
             'class_count_session_list']
 
+    #print "13"
 
     return pd.Series(session_stats)[col_order]
 
@@ -456,7 +559,9 @@ print "\n\nGini coefficient for classifications by user: %.2f\n" % nclass_gini
 # For a small classification file this is fast, but if you have > 1,000,000 this may be slow
 #  (albeit still much faster than a loop or similar)
 print "\nComputing session stats for each user..."
+
 session_stats = by_user.apply(sessionstats)
+#session_stats = sessionstats(by_user)
 
 # If no stats file was supplied, add the start and end dates in the classification file to the output filename
 if modstatsfile:
