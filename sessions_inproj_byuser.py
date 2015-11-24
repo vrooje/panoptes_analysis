@@ -3,30 +3,25 @@ import sys
 # file with raw classifications (csv)
 # put this way up here so if there are no inputs we exit quickly before even trying to load everything else
 default_statstart = "data_out/session_stats"
+default_sessionbreak = 60.
+
 try:
     classfile_in = sys.argv[1]
 except:
-    #classfile_in = 'data/2e3d12a2-56ca-4d1f-930a-9ecc7fd39885.csv'
-    print "\nUsage: "+sys.argv[0]+" classifications_infile [stats_outfile session_break_length]"
+    print "\nUsage: {0:} classifications_infile [stats_outfile session_break_length]".format(sys.argv[0])
     print "      classifications_infile is a Zooniverse (Panoptes) classifications data export CSV."
     print "      stats_outfile is the name of an outfile you'd like to write."
-    print "           if you don't specify one it will be "+default_statstart+"_[date]_to_[date].csv"
-    print "           where the dates show the first & last classification date."
-    print "      A new session is defined to start when 2 classifications by the same classifier are"
-    print "           separated by at least session_break_length minutes (default value: 60)"
+    print "           if you don't specify one it will be {0:}_[date]_to_[date].csv".format(default_statstart)
+    print "           where the dates show the first and last classification dates."
+    print "      A new session is defined to start when two classifications by the same classifier are"
+    print "           separated by at least session_break_length minutes (default value: {0:.0f})".format(default_sessionbreak)
     print "\nOnly the classifications_infile is a required input.\n"
     sys.exit(0)
-
-
 
 import numpy as np
 import pandas as pd
 import datetime
-import dateutil.parser
 import json
-
-
-
 
 
 # timestamps & timediffs are in nanoseconds below but we want outputs in hours or minutes, depending
@@ -38,34 +33,33 @@ import json
 ns2hours = 1.0 / (1.0e9*60.*60.)
 ns2mins  = 1.0 / (1.0e9*60.)
 
+"""
+Columns currently in an exported Panoptes classification file: 
+user_name,user_id,user_ip,workflow_id,workflow_name,workflow_version,created_at,gold_standard,expert,metadata,annotations,subject_data
 
-
-# columns currently in an exported Panoptes classification file: 
-# user_name,user_id,user_ip,workflow_id,workflow_name,workflow_version,created_at,gold_standard,expert,metadata,annotations,subject_data
-
-# user_name is either their registered name or "not-logged-in"+their hashed IP
-# user_id is their numeric Zooniverse ID or blank if they're unregistered
-# user_ip is a hashed version of their IP
-# workflow_id is the numeric ID of this workflow, which you can find in the project builder URL for managing the workflow:
-#       https://www.zooniverse.org/lab/[project_id]/workflow/[workflow_id]/
-# workflow_name is the name you gave your workflow (for sanity checks)
-# workflow_version is [bigchangecount].[smallchangecount] and is probably pretty big
-# created_at is the date the entry for the classification was recorded
-# gold_standard is 1 if this classification was done in gold standard mode
-# expert is 1 if this classification was done in expert mode... I think
-# metadata (json) is the data the browser sent along with the classification. 
-#       Includes browser information, language, started_at and finished_at
-#       note started_at and finished_at are perhaps the easiest way to calculate the length of a classification
-#       (the duration elapsed between consecutive created_at by the same user is another way)
-#       the difference here is back-end vs front-end
-# annotations (json) contains the actual classification information
-#       which for this analysis we will ignore completely, for now
-# subject_data is cross-matched from the subjects table and is for convenience in data reduction
-#       here we will ignore this too, except to count subjects once.
-# we'll also ignore user_ip, workflow information, gold_standard, and expert.
-# some of these will be defined further down, but before we actually use this list.
+    - user_name is either their registered name or "not-logged-in"+their hashed IP
+    - user_id is their numeric Zooniverse ID or blank if they're unregistered
+    - user_ip is a hashed version of their IP
+    - workflow_id is the numeric ID of this workflow, which you can find in the project builder URL
+          for managing the workflow: https://www.zooniverse.org/lab/[project_id]/workflow/[workflow_id]/
+    - workflow_name is the name you gave your workflow (for sanity checks)
+    - workflow_version is [bigchangecount].[smallchangecount] and is probably pretty big
+    - created_at is the date the entry for the classification was recorded
+    - gold_standard is 1 if this classification was done in gold standard mode
+    - expert is 1 if this classification was done in expert mode... I think
+    - metadata (json) is the data the browser sent along with the classification. 
+          Includes browser information, language, started_at and finished_at
+          note started_at and finished_at are perhaps the easiest way to calculate the length of a classification
+          (the duration elapsed between consecutive created_at by the same user is another way)
+          the difference here is back-end vs front-end
+    - annotations (json) contains the actual classification information
+          which for this analysis we will ignore completely, for now
+    - subject_data is cross-matched from the subjects table and is for convenience in data reduction
+          here we will ignore this too, except to count subjects once.
+          we'll also ignore user_ip, workflow information, gold_standard, and expert.
+          some of these will be defined further down, but before we actually use this list.
+"""
 cols_used = ["created_at_ts", "user_name", "user_id", "created_at", "started_at", "finished_at"]
-
 
 # Check for the other inputs on the command line
 
@@ -75,31 +69,27 @@ try:
     # If it's given on the command line, don't add the dates to the filename later
     modstatsfile = False
 except:
-    statsfile_out = default_statstart+".csv"
+    statsfile_out = "{0:}.csv".format(default_statstart)
     modstatsfile = True
 
-# The separation between 2 classifications, in minutes, that defines the start of a new session for a classifier
+# The separation between two classifications, in minutes, that defines the start of a new session for a classifier
 try:
     session_break = float(sys.argv[3])
 except:
-    session_break = 60.
+    session_break = default_sessionbreak
     
 # Print out the input parameters just as a sanity check    
-print "Computing session stats using:"
-print "   infile:",classfile_in
+print "\nComputing session stats using:"
+print "\tinfile:",classfile_in
 # If we're adding the dates to the output file, we can't print it out here because we don't yet know the dates
 if not modstatsfile:
-    print "   outfile:",statsfile_out
-print "   new session starts after classifier break of",session_break,"minutes\n"
-
-
-
+    print "\toutfile:",statsfile_out
+print "\tNew session starts after classifier break of {0:.0f} minutes\n".format(session_break)
 
 
 #################################################################################
 #################################################################################
 #################################################################################
-
 
 
 # This is the function that will compute the stats for each user
@@ -108,15 +98,15 @@ def sessionstats(grp):
     
     # groups and dataframes behave a bit differently; life is a bit easier if we DF the group
     # also sort each individual group rather than sort the whole classification dataframe; should be much faster
-    user_class = pd.DataFrame(grp).sort('created_at_ts', ascending=True)
-    
+    user_class = pd.DataFrame(grp).sort_values(by='created_at_ts', ascending=True)
+
     # If the user id is a number, great; if it's blank, keep it blank and don't force it to NaN
     try:
         theuserid = int(user_class.user_id.iloc[0])
     except:
         theuserid = user_class.user_id.iloc[0]
     
-    # the next 2 lines are why we converted into datetime
+    # the next two lines are why we converted into datetime
     user_class['duration'] = user_class.created_at_ts.diff()
     user_class['class_length'] = user_class.finished_at - user_class.started_at
     # set up the session count
@@ -155,8 +145,10 @@ def sessionstats(grp):
 
     # timedeltas are just ints, but interpreted a certain way. So force them to int as needed.
     # By default they're in nanoseconds
-    class_length_mean_overall   = np.mean(user_class.class_length).astype(int) * ns2mins
-    class_length_median_overall = np.median(user_class.class_length).astype(int) * ns2mins
+    #class_length_mean_overall   = np.mean(user_class.class_length).astype(int) * ns2mins
+    #class_length_median_overall = np.median(user_class.class_length).astype(int) * ns2mins
+    class_length_mean_overall   = np.mean([x.seconds for x in user_class.class_length]) * ns2mins
+    class_length_median_overall = np.median([x.seconds for x in user_class.class_length]) * ns2mins
     
     
     # index this into a timeseries
@@ -176,7 +168,13 @@ def sessionstats(grp):
     # get classification counts, total session durations, median classification length for each session
     # time units in minutes here
     # this may give a warning for 1-entry sessions but whatevs
+    #
+
     class_length_median = bysession.class_length.apply(lambda x: np.median(x))/datetime.timedelta(minutes=1)
+
+    print bysession.class_length.aggregate('sum'),type(bysession.class_length.aggregate('sum'))
+    print bysession.count.aggregate('sum'),type(bysession.count.aggregate('sum'))
+
     class_length_total  = bysession.class_length.aggregate('sum') * ns2mins
     class_count_session = bysession.count.aggregate('sum')
     
@@ -211,7 +209,7 @@ def sessionstats(grp):
     
     
     if n_sessions >= 4:
-        # get durations of first 2 and last 2 sessions
+        # get durations of first two and last two sessions
         mean_duration_first2 = (class_length_total[1]+class_length_total[2])/2.0
         mean_duration_last2  = (class_length_total[n_sessions]+class_length_total[n_sessions-1])/2.0
         mean_class_duration_first2 = (class_length_total[1]+class_length_total[2])/(class_count_session[1]+class_count_session[2]).astype(float)
@@ -288,35 +286,37 @@ def sessionstats(grp):
 #################################################################################
 
 
-# Get the Gini coefficient - https://en.wikipedia.org/wiki/Gini_coefficient
-# 
-# The Gini coefficient measures inequality in distributions of things.
-# It was originally conceived for economics (e.g. where is the wealth in a country?
-#  in the hands of many citizens or a few?), but it's just as applicable to many
-#  other fields. In this case we'll use it to see how classifications are
-#  distributed among classifiers.
-# G = 0 is a completely even distribution (everyone does the same number of 
-#  classifications), and ~1 is uneven (~all the classifications are done
-#  by one classifier). 
-# Typical values of the Gini for healthy Zooniverse projects (Cox et al. 2015) are
-#  in the range of 0.7-0.9.
-#  That range is generally indicative of a project with a loyal core group of 
-#    volunteers who contribute the bulk of the classification effort, but balanced
-#    out by a regular influx of new classifiers trying out the project, from which
-#    you continue to draw to maintain a core group of prolific classifiers.
-# Once your project is fairly well established, you can compare it to past Zooniverse
-#  projects to see how you're doing. 
-#  If your G is << 0.7, you may be having trouble recruiting classifiers into a loyal 
-#    group of volunteers. 
-#  If your G is > 0.9, it's a little more complicated. If your total classification
-#    count is lower than you'd like it to be, you may be having trouble recruiting
-#    classifiers to the project, such that your classification counts are
-#    dominated by a few people.
-#  But if you have G > 0.9 and plenty of classifications, this may be a sign that your
-#    loyal users are -really- committed, so a very high G is not necessarily a bad thing.
-#
-# Of course the Gini coefficient is a simplified measure that doesn't always capture
-#  subtle nuances and so forth, but it's still a useful broad metric.
+"""
+Get the Gini coefficient - https://en.wikipedia.org/wiki/Gini_coefficient
+
+The Gini coefficient measures inequality in distributions of things.
+It was originally conceived for economics (e.g. where is the wealth in a country?
+ in the hands of many citizens or a few?), but it's just as applicable to many
+ other fields. In this case we'll use it to see how classifications are
+ distributed among classifiers.
+G = 0 is a completely even distribution (everyone does the same number of 
+ classifications), and ~1 is uneven (~all the classifications are done
+ by one classifier). 
+Typical values of the Gini for healthy Zooniverse projects (Cox et al. 2015) are
+ in the range of 0.7-0.9.
+That range is generally indicative of a project with a loyal core group of 
+   volunteers who contribute the bulk of the classification effort, but balanced
+   out by a regular influx of new classifiers trying out the project, from which
+   you continue to draw to maintain a core group of prolific classifiers.
+Once your project is fairly well established, you can compare it to past Zooniverse
+ projects to see how you're doing. 
+ If your G is << 0.7, you may be having trouble recruiting classifiers into a loyal 
+   group of volunteers. 
+ If your G is > 0.9, it's a little more complicated. If your total classification
+   count is lower than you'd like it to be, you may be having trouble recruiting
+   classifiers to the project, such that your classification counts are
+   dominated by a few people.
+ But if you have G > 0.9 and plenty of classifications, this may be a sign that your
+   loyal users are -really- committed, so a very high G is not necessarily a bad thing.
+
+Of course the Gini coefficient is a simplified measure that doesn't always capture
+ subtle nuances and so forth, but it's still a useful broad metric.
+"""
 
 def gini(list_of_values):
     sorted_list = sorted(list_of_values)
@@ -341,6 +341,19 @@ def gini(list_of_values):
 
 
 print "Reading classifications from "+classfile_in
+
+dtypes = {'user_name': str,
+'user_id': np.int64,
+'user_ip': str,
+'workflow_id': np.int,
+'workflow_name': str,
+'workflow_version': np.float64,
+'created_at': str,
+'gold_standard': str,
+'expert': str,
+'metadata': str,
+'annotations': str,
+'subject_data': str}
 
 classifications = pd.read_csv(classfile_in)
 
@@ -400,11 +413,6 @@ except Exception as the_error:
         print "Oops:\n", the_error
         classifications['finished_at'] = pd.to_datetime(fa_temp)
 
-
-
-
-
-
 # save processing time and memory; only keep the columns we're going to use
 # though before we do that, grab the subject count
 n_subj_tot  = len(classifications.subject_data.unique())
@@ -434,7 +442,7 @@ n_reg   = n_users_tot - n_unreg
 # e.g. whether they're also your most prolific Talk users
 nclass_byuser = by_user.created_at.aggregate('count')
 nclass_byuser_ranked = nclass_byuser.copy()
-nclass_byuser_ranked.sort(ascending=False)
+nclass_byuser_ranked.sort_values(inplace=True,ascending=False)
 
 # very basic stats
 nclass_med    = np.median(nclass_byuser)
@@ -442,13 +450,14 @@ nclass_mean   = np.mean(nclass_byuser)
 
 # Gini coefficient - see the comments above the gini() function for more notes
 nclass_gini   = gini(nclass_byuser)
+ntop = 10
 
-print "\nOverall:\n\n",n_class_tot,"classifications of",n_subj_tot,"subjects by",n_users_tot,"classifiers,"
-print n_reg,"registered and",n_unreg,"unregistered.\n"
-print "Median number of classifications per user:",nclass_med
-print "Mean number of classifications per user: %.2f" % nclass_mean
-print "\nTop 10 most prolific classifiers:\n",nclass_byuser_ranked.head(10)
-print "\n\nGini coefficient for classifications by user: %.2f\n" % nclass_gini
+print "\nOverall:\n\n{0:.0f} classifications of {1:.0f} subjects by {2:.0f} classifiers,".format(n_class_tot,n_subj_tot,n_users_tot)
+print "with {0:.0f} registered users and {1:.0f} unregistered users.\n".format(n_reg,n_unreg)
+print "Median number of classifications per user: {0:.0f}".format(nclass_med)
+print "Mean number of classifications per user: {0:.1f}".format(nclass_mean)
+print "\n{0:.0f} most prolific classifiers:\n".format(ntop),nclass_byuser_ranked.head(ntop)
+print "\n\nGini coefficient for classifications by user: {0:.2f}\n".format(nclass_gini)
 
 
 # compute the per-user stats
@@ -462,8 +471,7 @@ session_stats = by_user.apply(sessionstats)
 if modstatsfile:
     statsfile_out = statsfile_out.replace('.csv', '_'+first_class_day+'_to_'+last_class_day+'.csv')
 
-print "Writing to file", statsfile_out,"..."
+print "Writing to file {0:} ...".format(statsfile_out)
 session_stats.to_csv(statsfile_out)
 
-
-            
+# End of file
