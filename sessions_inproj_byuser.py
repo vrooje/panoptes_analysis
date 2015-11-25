@@ -1,17 +1,20 @@
+#Python 2.7.9 (default, Apr  5 2015, 22:21:35) 
 import sys
 
 # file with raw classifications (csv)
 # put this way up here so if there are no inputs we exit quickly before even trying to load everything else
-default_statstart = "data_out/session_stats"
+default_statstart = "session_stats"
 try:
     classfile_in = sys.argv[1]
 except:
     #classfile_in = 'data/2e3d12a2-56ca-4d1f-930a-9ecc7fd39885.csv'
-    print "\nUsage: "+sys.argv[0]+" classifications_infile [stats_outfile session_break_length]"
+    print "\nUsage: "+sys.argv[0]+" classifications_infile [stats_outfile add_dates_to_file session_break_length]"
     print "      classifications_infile is a Zooniverse (Panoptes) classifications data export CSV."
     print "      stats_outfile is the name of an outfile you'd like to write."
     print "           if you don't specify one it will be "+default_statstart+"_[date]_to_[date].csv"
     print "           where the dates show the first & last classification date."
+    print "      add_dates_to_file is 1 if you want to add \"_[date]_to_[date]\" to the output filename, as"
+    print "           described above, even if you did specify a stats_outfile name."
     print "      A new session is defined to start when 2 classifications by the same classifier are"
     print "           separated by at least session_break_length minutes (default value: 60)"
     print "\nOnly the classifications_infile is a required input.\n"
@@ -19,13 +22,11 @@ except:
 
 
 
-import numpy as np
-import pandas as pd
+import numpy as np  # using 1.10.1
+import pandas as pd  # using 0.13.1
 import datetime
 import dateutil.parser
 import json
-
-
 
 
 
@@ -63,6 +64,7 @@ ns2mins  = 1.0 / (1.0e9*60.)
 # subject_data is cross-matched from the subjects table and is for convenience in data reduction
 #       here we will ignore this too, except to count subjects once.
 # we'll also ignore user_ip, workflow information, gold_standard, and expert.
+#
 # some of these will be defined further down, but before we actually use this list.
 cols_used = ["created_at_ts", "user_name", "user_id", "created_at", "started_at", "finished_at"]
 
@@ -78,9 +80,19 @@ except:
     statsfile_out = default_statstart+".csv"
     modstatsfile = True
 
+try: 
+    add_date_temp = int(sys.argv[3])
+    if add_date_temp == 1:
+        modstatsfile = True
+    # else nothing, just keep whatever modstatsfile is already defined as    
+except:
+    # ignore this as you'll have already defined modstatsfile above
+    pass
+
+
 # The separation between 2 classifications, in minutes, that defines the start of a new session for a classifier
 try:
-    session_break = float(sys.argv[3])
+    session_break = float(sys.argv[4])
 except:
     session_break = 60.
     
@@ -178,7 +190,7 @@ def sessionstats(grp):
     # this may give a warning for 1-entry sessions but whatevs
     class_length_median = bysession.class_length.apply(lambda x: np.median(x))/datetime.timedelta(minutes=1)
     class_length_total  = bysession.class_length.aggregate('sum') * ns2mins
-    class_count_session = bysession.count.aggregate('sum')
+    class_count_session = bysession['count'].aggregate('sum')
     
     # make commas into semicolons because we don't want to break the eventual CSV output
     class_count_session_list = str(class_count_session.tolist()).replace(',',';')
@@ -212,6 +224,14 @@ def sessionstats(grp):
     
     if n_sessions >= 4:
         # get durations of first 2 and last 2 sessions
+        # Note: this idea comes from Sauermann & Franzoni (2015) and their related work
+        # http://www.pnas.org/content/112/3/679.full
+        # You can use it to examine whether on average your classifiers are doing
+        # more or less work per session at the start vs end of their time spent on your project,
+        # as well as examine the classification duration to see if they are more efficient at
+        # classifying. Keep in mind the various assumptions you need to make about how the
+        # intrinsic difficulty of classifying a subject varies (or doesn't) over the length of your
+        # project in order to do this analysis, etc.
         mean_duration_first2 = (class_length_total[1]+class_length_total[2])/2.0
         mean_duration_last2  = (class_length_total[n_sessions]+class_length_total[n_sessions-1])/2.0
         mean_class_duration_first2 = (class_length_total[1]+class_length_total[2])/(class_count_session[1]+class_count_session[2]).astype(float)
@@ -224,13 +244,17 @@ def sessionstats(grp):
     
     
     # now set up the DF to return
+    # but keep it as a list until later, which is about 30s shorter when running this function over ~4500 users
+    # versus setting the Series earlier, so for large classification exports with many thousands of users this will 
+    # make a significant difference.
     session_stats = {}
     session_stats["user_id"]                              = theuserid # note: username will be in the index, this is zooid
+    #session_stats = pd.Series(session_stats)              # so the subsequent column ordering is preserved, make it a series now
     session_stats["n_class"]                              = n_class
     session_stats["n_sessions"]                           = n_sessions
     session_stats["n_days"]                               = n_days
-    session_stats["first_day"]                            = first_day
-    session_stats["last_day"]                             = last_day
+    session_stats["first_day"]                            = first_day[:10]
+    session_stats["last_day"]                             = last_day[:10]
     session_stats["tdiff_firstlast_hours"]                = tdiff_firstlast_hours             # hours
     session_stats["time_spent_classifying_total_minutes"] = session_length_total              # minutes
     session_stats["class_per_session_min"]                = count_min
@@ -251,7 +275,6 @@ def sessionstats(grp):
 
 
     # lists don't preserve column order so let's manually order
-    # at some point I should check whether it would work to make a Series earlier and add columns to that in order
     col_order = ['user_id',
             'n_class',
             'n_sessions',
@@ -278,7 +301,7 @@ def sessionstats(grp):
 
 
     return pd.Series(session_stats)[col_order]
-
+    #return session_stats
 
 
 
@@ -307,7 +330,7 @@ def sessionstats(grp):
 # Once your project is fairly well established, you can compare it to past Zooniverse
 #  projects to see how you're doing. 
 #  If your G is << 0.7, you may be having trouble recruiting classifiers into a loyal 
-#    group of volunteers. 
+#    group of volunteers. People are trying it, but not many are staying.
 #  If your G is > 0.9, it's a little more complicated. If your total classification
 #    count is lower than you'd like it to be, you may be having trouble recruiting
 #    classifiers to the project, such that your classification counts are
@@ -413,6 +436,7 @@ classifications = classifications[cols_used]
 # index by created_at as a timeseries
 # note: this means things might not be uniquely indexed
 # but it makes a lot of things easier and faster.
+# update: it's not really needed in the main bit, but will do it on each group later.
 #classifications.set_index('created_at_ts', inplace=True)
 
 
@@ -420,7 +444,7 @@ all_users = classifications.user_name.unique()
 by_user = classifications.groupby('user_name')
 
 
-# get some basic overall stats
+# get total classification and user counts
 n_class_tot = len(classifications)
 n_users_tot = len(all_users)
 
@@ -453,16 +477,18 @@ print "\n\nGini coefficient for classifications by user: %.2f\n" % nclass_gini
 
 # compute the per-user stats
 # alas I don't know of a way to print a progress bar or similar for group.apply() functions
+#     addition: apparently there's "pip install progressbar", but I haven't tried it yet, feel free to hack
 # For a small classification file this is fast, but if you have > 1,000,000 this may be slow
 #  (albeit still much faster than a loop or similar)
-print "\nComputing session stats for each user..."
+# For a test file with 175,000 classifications and ~4,500 users it takes just under 90 seconds.
+print "\nComputing session stats for each user...",datetime.datetime.now().strftime('%H:%M:%S.%f')
 session_stats = by_user.apply(sessionstats)
 
 # If no stats file was supplied, add the start and end dates in the classification file to the output filename
 if modstatsfile:
     statsfile_out = statsfile_out.replace('.csv', '_'+first_class_day+'_to_'+last_class_day+'.csv')
 
-print "Writing to file", statsfile_out,"..."
+print "Writing to file", statsfile_out,"...",datetime.datetime.now().strftime('%H:%M:%S.%f')
 session_stats.to_csv(statsfile_out)
 
 
