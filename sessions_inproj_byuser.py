@@ -221,6 +221,9 @@ def sessionstats(grp):
 #     nproj_session_min  = np.min(ses_nproj)
 #     nproj_session_max  = np.max(ses_nproj)
     
+
+    which_session_longest = class_length_total[class_length_total == np.max(class_length_total)].index[0]    
+
     
     if n_sessions >= 4:
         # get durations of first 2 and last 2 sessions
@@ -267,6 +270,7 @@ def sessionstats(grp):
     session_stats["session_length_median"]                = session_length_median             # minutes
     session_stats["session_length_min"]                   = session_length_min                # minutes
     session_stats["session_length_max"]                   = session_length_max                # minutes
+    session_stats["which_session_longest"]                = which_session_longest
     session_stats["mean_session_length_first2"]           = mean_duration_first2              # minutes
     session_stats["mean_session_length_last2"]            = mean_duration_last2               # minutes
     session_stats["mean_class_length_first2"]             = mean_class_duration_first2        # minutes
@@ -293,6 +297,7 @@ def sessionstats(grp):
             'session_length_median',
             'session_length_min',
             'session_length_max',
+            'which_session_longest',
             'mean_session_length_first2',
             'mean_session_length_last2',
             'mean_class_length_first2',
