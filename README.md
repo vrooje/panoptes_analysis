@@ -19,6 +19,7 @@ Tools for analysis of classification and subject data from github.com/zooniverse
     - *session_length_median:* median length of a session (minutes)
     - *session_length_min:* length of shortest session (minutes)
     - *session_length_max:* length of longest session (minutes)
+    - *which_session_longest:* session number of classifier's longest session (by time spent)
     - *mean_session_length_first2:* mean session length in the classifier's first 2 sessions (minutes)
     - *mean_session_length_last2:* mean session length in the classifier's last 2 sessions (minutes)
     - *mean_class_length_first2:* mean classification length in the classifier's first 2 sessions (minutes)
