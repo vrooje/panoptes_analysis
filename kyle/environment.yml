@@ -1,0 +1,5 @@
+name: Data-digging
+dependencies:
+- python=2.7
+- pandas=0.17
+- numpy=1.10
