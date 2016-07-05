@@ -1,7 +1,17 @@
 # panoptes_analysis
 Tools for analysis of classification and subject data from github.com/zooniverse/Panoptes
 
- - sessions_inproj_byuser.py - computes classification and session statistics for classifiers. Run at the the command line without additional inputs to see the usage. *Output columns:*
+ - `basic_project_stats.py` - computes basic statistics from a raw classification export file. Run without any inputs to see usage details. Outputs to screen:
+    - Total number of classifications
+    - Total number of classifiers (registered and unregistered)
+    - Stats on classifications per subject
+    - Stats on classifications per user
+    - Top 10 most prolific classifiers (note: for your edification only; I strongly recommend *against* publishing this)
+    - Gini coefficient for classifications (more details on this in the code, as comments)
+
+   This pays no attention to separate workflows or versions, so if you want those separated you will need to save a subset of the raw classification exports to a new csv file with the same format.
+
+ - `sessions_inproj_byuser.py` - computes classification and session statistics for classifiers. Run at the the command line without additional inputs to see the usage. *Output columns:*
     - *n_class:* total number of classifications by the classifier
     - *n_sessions:* total number of sessions by the classifier
     - *n_days:* number of unique days on which the classifier has classified
