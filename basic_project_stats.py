@@ -25,8 +25,9 @@ import json
 
 
 # columns currently in an exported Panoptes classification file:
-# user_name,user_id,user_ip,workflow_id,workflow_name,workflow_version,created_at,gold_standard,expert,metadata,annotations,subject_data
+# classification_id,user_name,user_id,user_ip,workflow_id,workflow_name,workflow_version,created_at,gold_standard,expert,metadata,annotations,subject_data
 
+# classification_id identifies the specific classification - should be unique for each row in this file
 # user_name is either their registered name or "not-logged-in"+their hashed IP
 # user_id is their numeric Zooniverse ID or blank if they're unregistered
 # user_ip is a hashed version of their IP
@@ -46,7 +47,7 @@ import json
 #       which for this analysis we will ignore completely, for now
 # subject_data is cross-matched from the subjects table and is for convenience in data reduction
 #       here we will ignore this too, except to count subjects once.
-# we'll also ignore user_ip, workflow information, gold_standard, and expert.
+# we'll also ignore classification_id, user_ip, workflow information, gold_standard, and expert.
 #
 # some of these will be defined further down, but before we actually use this list.
 #cols_used = ["created_at_ts", "user_name", "user_id", "created_at", "started_at", "finished_at"]
