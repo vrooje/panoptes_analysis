@@ -1,3 +1,4 @@
+#Updated to Python 3.8.3 (Feb 23, 2023)
 #Python 2.7.9 (default, Apr  5 2015, 22:21:35)
 import sys
 
@@ -7,9 +8,9 @@ try:
     classfile_in = sys.argv[1]
 except:
     #classfile_in = 'data/2e3d12a2-56ca-4d1f-930a-9ecc7fd39885.csv'
-    print "\nUsage: "+sys.argv[0]+" classifications_infile"
-    print "      classifications_infile is a Zooniverse (Panoptes) classifications data export CSV."
-    print "\nAll output will be to stdout (about a paragraph worth).\n"
+    print("\nUsage: "+sys.argv[0]+" classifications_infile")
+    print("      classifications_infile is a Zooniverse (Panoptes) classifications data export CSV.")
+    print("\nAll output will be to stdout (about a paragraph worth).\n")
     sys.exit(0)
 
 
@@ -54,8 +55,8 @@ import json
 
 
 # Print out the input parameters just as a sanity check
-print "Computing project stats using:"
-print "   infile:",classfile_in
+print("Computing project stats using:")
+print("   infile:",classfile_in)
 
 
 
@@ -117,7 +118,7 @@ def gini(list_of_values):
 # Begin the main stuff
 
 
-print "Reading classifications from "+classfile_in
+print("Reading classifications from "+classfile_in)
 
 classifications = pd.read_csv(classfile_in)
 
@@ -174,7 +175,7 @@ n_reg   = n_users_tot - n_unreg
 # e.g. whether they're also your most prolific Talk users
 nclass_byuser = by_user.created_at.aggregate('count')
 nclass_byuser_ranked = nclass_byuser.copy()
-nclass_byuser_ranked.sort(ascending=False)
+nclass_byuser_ranked.sort_values(ascending=False,inplace=True)
 
 # very basic stats
 nclass_med    = np.median(nclass_byuser)
@@ -183,14 +184,14 @@ nclass_mean   = np.mean(nclass_byuser)
 # Gini coefficient - see the comments above the gini() function for more notes
 nclass_gini   = gini(nclass_byuser)
 
-print "\nOverall:\n\n",n_class_tot,"classifications of",n_subj_tot,"subjects by",n_users_tot,"classifiers,"
-print n_reg,"registered and",n_unreg,"unregistered.\n"
-print "That's %.2f classifications per subject on average (median = %.1f)." % (subj_class_mean, subj_class_med)
-print "The most classified subject has ",subj_class_max,"classifications; the least-classified subject has",subj_class_min,".\n"
-print "Median number of classifications per user:",nclass_med
-print "Mean number of classifications per user: %.2f" % nclass_mean
-print "\nTop 10 most prolific classifiers:\n",nclass_byuser_ranked.head(10)
-print "\n\nGini coefficient for classifications by user: %.2f\n" % nclass_gini
+print("\nOverall:\n\n",n_class_tot,"classifications of",n_subj_tot,"subjects by",n_users_tot,"classifiers,")
+print(n_reg,"registered and",n_unreg,"unregistered.\n")
+print("That's %.2f classifications per subject on average (median = %.1f)." % (subj_class_mean, subj_class_med))
+print("The most classified subject has ",subj_class_max,"classifications; the least-classified subject has",subj_class_min,".\n")
+print("Median number of classifications per user:",nclass_med)
+print("Mean number of classifications per user: %.2f" % nclass_mean)
+print("\nTop 10 most prolific classifiers:\n",nclass_byuser_ranked.head(10))
+print("\n\nGini coefficient for classifications by user: %.2f\n" % nclass_gini)
 
 
 # That's it. This program is very basic.
